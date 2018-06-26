@@ -31,31 +31,13 @@ Self-Driving Car Engineer Nanodegree Program
 * Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
 
 
-## Basic Build Instructions
+## Basic Build Instructions and Running
 
 1. Clone this repo.
 2. Make a build directory: `mkdir build && cd build`
 3. Compile: `cmake .. && make`
 4. Run it: `./mpc`.
-
-## Tips
-
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.)
-4.  Tips for setting up your environment are available [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
-5. **VM Latency:** Some students have reported differences in behavior using VM's ostensibly a result of latency.  Please let us know if issues arise as a result of a VM environment.
-
-## Editor Settings
-
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+5. Run the Udacity Simulator.
 
 ## Code Style
 
@@ -70,39 +52,80 @@ More information is only accessible by people who are already enrolled in Term 2
 of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
 for instructions and the project rubric.
 
-## Hints!
 
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
+## Model Predictive Control
+The MPC is an advanced control technique for complex control problems. MPC is an optmization problem to find the best set of control inputs that minimizes the cost functions based on the prediction (dynamical) model. The MPC controller consists of Prediction Horizon, State and Model, Polynomial Fitting and MPC Preprocessing, Constraints and Latency.
 
-## Call for IDE Profiles Pull Requests
+### Prediction Horizon and State
+The Prediction Horizom is the duration over which future predictions are made. It contains the number of timesteps N in the horizon and the time elapse of each timestep dt. A higher N will result in extra computational cost. In this project, N is set to 10 and dt is 0.1, which can achieve a best result.
+The state consists of system variables and errors.It can be expressed as below:
+[x,y,psi,v,cte,epsi]
 
-Help your fellow students!
+### Model's Update equations
+The followind equations updates the prediction model at every timestep:
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
+![equation](http://latex.codecogs.com/gif.latex?x_%28t&plus;1%29%20%3D%20x_t%20&plus;%20v_t%20*%20cos%28%5Cpsi_t%29*dt)
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
+![equation](http://latex.codecogs.com/gif.latex?y_%28t&plus;1%29%20%3D%20y_t%20&plus;%20v_t%20*%20sin%28%5Cpsi_t%29*dt)
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
+![equation](http://latex.codecogs.com/gif.latex?%5Cpsi%20_%28t&plus;1%29%20%3D%20%5Cpsi%20_t%20&plus;%20%5Cfrac%7Bv_t%7D%7BL_f%7D*%20%5Cdelta_t%20*%20dt)
 
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
+![equation](http://latex.codecogs.com/gif.latex?v_%28t&plus;1%29%20%3D%20v%20_t%20&plus;%20a_t%20*%20dt)
 
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
+![equation](http://latex.codecogs.com/gif.latex?cte_%28t&plus;1%29%20%3D%20f%28x_t%29%20-%20y_t%20&plus;%20v%20_t%20*%20sin%28e%5Cpsi%20_t%29%20*%20dt)
 
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+![equation](http://latex.codecogs.com/gif.latex?e%5Cpsi%20_%28t&plus;1%29%20%3D%20%5Cpsi%20_t%20-%20%5Cpsi%20dest%20&plus;%20%5Cfrac%7Bv_f%7D%7BL_f%7D%20*%20%5Cdelta_t%20*%20dt)
+
+### Model's Update equations
+
+Before fitting the path returned from the simulator, we have to preprocess in order to move the points to the origin (x=0, y=0) and also rotate the path to follow the car orientation.
+
+```c
+//Adjust plain path to car coordinates
+//Set x, y and psi to zero
+for(unsigned int i=0; i < ptsx.size(); i++){      
+    //shift car reference angle to 90 degrees
+    double shift_x = ptsx[i] -px;
+    double shift_y = ptsy[i] -py;
+    ptsx[i] = (shift_x * cos(0-psi) - shift_y*sin(0-psi));
+    ptsy[i] = (shift_x * sin(0-psi) + shift_y*cos(0-psi));
+```
+After preprocessing, using ``polyfit`` to fit polynomial (file main.cpp at line 121).
+
+### Constraints(Cost　Function)
+
+The actuators constraints limits the upper and lower bounds of the steering angle and throttle acceleration/brake.
+
+![equation](http://latex.codecogs.com/gif.latex?%5Cdelta%20%5Cepsilon%20%5B-25%5E%7B%5Ccirc%7D%2C%2025%5E%7B%5Ccirc%7D%5D)
+
+![equation](http://latex.codecogs.com/gif.latex?a%20%5Cepsilon%20%5B-1%2C%201%5D)
+
+The MPC cost's error should be minimized. The const function requires the model to predict where the vehicle will go in the future to compute the difference of ideal position and predicted one.
+
+![equation](http://latex.codecogs.com/gif.latex?J%20%3D%20%5Csum%5E%7BN%7D_%7Bt%3D1%7D%5B%28cte_t%20-%20cte_%7Bref%7D%29%5E2%20&plus;%20%28e%5Cpsi_t%20-%20e%5Cpsi_%7Bref%7D%29%5E2%20&plus;%20...%5D)
+
+For this project, we used the following cost functions to tune the controller(file mpc.cpp at line 53):
+
+```c
+
+	//Cost related to the reference state.
+	for (unsigned int t = 0; t < N; t++) {
+		fg[0] += 10000*CppAD::pow(vars[cte_start + t], 2); 
+		fg[0] += 10000*CppAD::pow(vars[epsi_start + t], 2); 
+		fg[0] += 5*CppAD::pow(vars[v_start + t] - ref_v, 2); 
+	}
+	//Minimize the use of actuators.
+	for (unsigned int t = 0; t < N - 1; t++) {
+		//Increase the cost depending on the steering angle
+	 	fg[0] += 250*CppAD::pow((vars[delta_start + t]/(0.436332*Lf))*vars[a_start + t], 2);
+		fg[0] += 50*CppAD::pow(vars[delta_start + t], 2);
+	}
+	//Minimize the value gap between sequential actuations.
+	for (unsigned int t = 0; t < N - 2; t++) {
+		fg[0] += 5*CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2); 
+		fg[0] += 5*CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2); 
+	}
+``` 
 
 ## How to write a README
 A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
