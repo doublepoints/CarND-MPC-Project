@@ -126,6 +126,21 @@ For this project, we used the following cost functions to tune the controller(fi
 		fg[0] += 5*CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2); 
 	}
 ``` 
+Moreover, the following figure shows the result of using the cost function above.The iterations is 300.
+![](https://raw.githubusercontent.com/doublepoints/CarND-MPC-Project/master/fig/figure_1.png) 
 
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+### Latency
+
+In order to deal with the latency, the MPC solver should be called before predicting the next state. The implement is shown below.
+
+```c
+dt = 0.1;
+x1    = v * cos(0) * dt;
+y1    = v * sin(0) * dt;
+psi1  = - v/Lf * steer_value * dt;
+v1    = throttle_value * dt;
+cte1  =   v * sin(epsi1) * dt;
+epsi1 = - v * steer_value / Lf * dt;	
+```
+The following figure is the screenshot of the inplemention.
+![](https://raw.githubusercontent.com/doublepoints/CarND-MPC-Project/master/fig/Untitled.png) 
